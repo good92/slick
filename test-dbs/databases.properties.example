@@ -29,6 +29,25 @@ postgres.drop.1 = DROP DATABASE IF EXISTS "[DB]"
 postgres.drop.2 = DROP TABLESPACE IF EXISTS slick_test
 postgres.driver = org.postgresql.Driver
 
+
+# OracleSQL quick setup:
+# - Install ORACLE server with default options
+# - Change password in oracle.password
+# - Set postgres.enabled = true
+
+oracle.enabled = false
+oracle.url = jdbc:oracle:thin:@[DB]
+oracle.user = oracle
+oracle.password = secret
+oracle.adminDB = oraclesys
+oracle.testDB = slick-test
+oracle.create.1 = CREATE TABLESPACE slick_test LOCATION '[DBPATH]'
+oracle.create.2 = CREATE DATABASE "[DB]" TEMPLATE = template0 TABLESPACE slick_test
+oracle.postCreate = create extension lo
+oracle.drop.1 = DROP DATABASE IF EXISTS "[DB]"
+oracle.drop.2 = DROP TABLESPACE IF EXISTS slick_test
+oracle.driver = oracle.jdbc.driver.OracleDriver
+
 # MySQL quick setup:
 # - Install MySQL Essentials with default options
 # - Change password in mysql.password
