@@ -2,11 +2,11 @@ package scala.slick.driver
 
 import java.sql.{Statement, PreparedStatement}
 import scala.slick.SlickException
-import scala.slick.ast.Node
+import scala.slick.ast.{CompiledStatement, ResultSetMapping, Node}
+import scala.slick.compiler.CodeGen
 import scala.slick.lifted.{DDL, Query, Shape, ShapedValue}
-import scala.slick.jdbc.{PositionedParameters, PositionedResult}
-import scala.slick.util.RecordLinearizer
-import scala.slick.jdbc.{UnitInvoker, UnitInvokerMixin, MutatingStatementInvoker, MutatingUnitInvoker, ResultSetInvoker}
+import scala.slick.jdbc.{CompiledMapping, UnitInvoker, UnitInvokerMixin, MutatingStatementInvoker, MutatingUnitInvoker, ResultSetInvoker, PositionedParameters, PositionedResult}
+import scala.slick.util.{SQLBuilder, ValueLinearizer, RecordLinearizer}
 
 trait JdbcInvokerComponent { driver: JdbcDriver =>
 
@@ -16,23 +16,36 @@ trait JdbcInvokerComponent { driver: JdbcDriver =>
   def createMappedKeysInsertInvoker[U, RU, R](unpackable: ShapedValue[_, U], keys: ShapedValue[_, RU], tr: (U, RU) => R) = new MappedKeysInsertInvoker(unpackable, keys, tr)
 
   /** Invoker for executing queries. */
-  class QueryInvoker[QQ, R](q: Query[QQ, _ <: R])
+  class QueryInvoker[R](protected val tree: Node)
     extends MutatingStatementInvoker[Unit, R] with UnitInvokerMixin[R] with MutatingUnitInvoker[R] {
+
+    val ResultSetMapping(_,
+      CompiledStatement(_, sres: SQLBuilder.Result, _),
+      CompiledMapping(converter, _)) = tree
+
     override protected val delegate = this
-    protected lazy val sres = buildSelectStatement(q)
     protected def getStatement = sres.sql
     protected def setParam(param: Unit, st: PreparedStatement): Unit = sres.setter(new PositionedParameters(st), null)
-    protected def extractValue(rs: PositionedResult): R = sres.linearizer.narrowedLinearizer.asInstanceOf[RecordLinearizer[R]].getResult(driver, rs)
-    protected def updateRowValues(rs: PositionedResult, value: R) = sres.linearizer.narrowedLinearizer.asInstanceOf[RecordLinearizer[R]].updateResult(driver, rs, value)
+    protected def extractValue(pr: PositionedResult): R = converter.read(pr).asInstanceOf[R]
+    protected def updateRowValues(pr: PositionedResult, value: R) = converter.update(value, pr)
     def invoker: this.type = this
   }
 
   /** Pseudo-invoker for running DDL statements. */
   class DDLInvoker(ddl: DDL) {
+    var isDebug = false
     /** Create the entities described by this DDL object */
     def create(implicit session: Backend#Session): Unit = session.withTransaction {
-      for(s <- ddl.createStatements)
-        session.withPreparedStatement(s)(_.execute)
+      // todo debug mode
+      var m: String = ""
+      try {
+        for(s <- ddl.createStatements) {
+          m = s
+          session.withPreparedStatement(s)(_.execute)
+        }
+      } catch {
+        case e: Exception => println(m); throw e
+      }
     }
 
     /** Drop the entities described by this DDL object */
@@ -45,13 +58,13 @@ trait JdbcInvokerComponent { driver: JdbcDriver =>
   }
 
   /** Pseudo-invoker for running DELETE calls. */
-  class DeleteInvoker(query: Query[_, _]) {
-    protected lazy val built = buildDeleteStatement(query)
+  class DeleteInvoker(protected val tree: Node) {
+    protected val (_, sres: SQLBuilder.Result) = CodeGen.findResult(tree)
 
-    def deleteStatement = built.sql
+    def deleteStatement = sres.sql
 
     def delete(implicit session: Backend#Session): Int = session.withPreparedStatement(deleteStatement) { st =>
-      built.setter(new PositionedParameters(st), null)
+      sres.setter(new PositionedParameters(st), null)
       st.executeUpdate
     }
 
@@ -228,18 +241,18 @@ trait JdbcInvokerComponent { driver: JdbcDriver =>
   }
 
   /** Pseudo-invoker for running UPDATE calls. */
-  class UpdateInvoker[T] (query: Query[_, T]) {
-    protected lazy val built = buildUpdateStatement(query)
+  class UpdateInvoker[T](protected val tree: Node, protected val linearizer: ValueLinearizer[_]) {
+    protected val (_, sres: SQLBuilder.Result) = CodeGen.findResult(tree)
 
     def updateStatement = getStatement
 
-    protected def getStatement = built.sql
+    protected def getStatement = sres.sql
 
     def update(value: T)(implicit session: Backend#Session): Int = session.withPreparedStatement(updateStatement) { st =>
       st.clearParameters
       val pp = new PositionedParameters(st)
-      built.linearizer.narrowedLinearizer.asInstanceOf[RecordLinearizer[T]].setParameter(driver, pp, Some(value))
-      built.setter(pp, null)
+      linearizer.narrowedLinearizer.asInstanceOf[RecordLinearizer[T]].setParameter(driver, pp, Some(value))
+      sres.setter(pp, null)
       st.executeUpdate
     }
 
