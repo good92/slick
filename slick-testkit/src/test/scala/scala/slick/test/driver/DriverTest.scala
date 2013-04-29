@@ -4,7 +4,7 @@ import org.junit.runner.RunWith
 import com.typesafe.slick.testkit.util.{DriverTest, Testkit}
 import scala.slick.testutil.TestDBs
 
-@RunWith(classOf[Testkit])
+/*@RunWith(classOf[Testkit])
 class H2MemTest extends DriverTest(TestDBs.H2Mem)
 
 @RunWith(classOf[Testkit])
@@ -41,4 +41,7 @@ class SQLServerJTDSTest extends DriverTest(TestDBs.SQLServerJTDS)
 class SQLServerSQLJDBCTest extends DriverTest(TestDBs.SQLServerSQLJDBC)
 
 @RunWith(classOf[Testkit])
-class MSAccessTest extends DriverTest(TestDBs.MSAccess)
+class MSAccessTest extends DriverTest(TestDBs.MSAccess)   */
+
+@RunWith(classOf[Testkit])
+class OracleTest extends DriverTest(TestDBs.Oracle)
