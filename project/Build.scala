@@ -1,8 +1,8 @@
 import sbt._
 import Keys._
 import Tests._
-import com.jsuereth.sbtsite.SphinxSupport.Sphinx
-import com.jsuereth.sbtsite.SitePlugin.site
+import com.typesafe.sbt.site.SphinxSupport.Sphinx
+import com.typesafe.sbt.SbtSite.site
 
 object SlickBuild extends Build {
 
@@ -10,16 +10,15 @@ object SlickBuild extends Build {
   val repoKind = SettingKey[String]("repo-kind", "Maven repository kind (\"snapshots\" or \"releases\")")
 
   val publishedScalaSettings = Seq(
-    scalaVersion := "2.10.0",
+    scalaVersion := "2.10.1",
     scalaBinaryVersion <<= scalaVersion,
     //crossScalaVersions ++= "2.10.0-M4" :: Nil,
-    libraryDependencies <+= scalaVersion("org.scala-lang" % "scala-compiler" % _),
-    libraryDependencies in config("macro") <+= scalaVersion("org.scala-lang" % "scala-compiler" % _)
+    libraryDependencies <+= scalaVersion("org.scala-lang" % "scala-compiler" % _ % "optional")
   )
 
   def localScalaSettings(path: String): Seq[Setting[_]] = Seq(
-    scalaVersion := "2.10.0-unknown",
-    scalaBinaryVersion := "2.10.0-unknown",
+    scalaVersion := "2.10.1",
+    scalaBinaryVersion := "2.10.1",
     crossVersion := CrossVersion.Disabled,
     scalaHome := Some(file(path)),
     autoScalaLibrary := false,
@@ -37,13 +36,24 @@ object SlickBuild extends Build {
     }
   }
 
+  def extTarget(extName: String, t: Option[String]): Seq[Setting[File]] = {
+    sys.props("slick.build.target") match {
+      case null => t.map(f => Seq(target := file(f))).getOrElse(Seq.empty)
+      case path => Seq(target := file(path + "/" + extName))
+    }
+  }
+
   lazy val sharedSettings = Seq(
     version := "1.1.0-SNAPSHOT",
     organizationName := "Typesafe",
     organization := "com.typesafe.slick",
-    resolvers += Resolver.sonatypeRepo("snapshots"),
+    resolvers ++= Seq(
+      "Local" at "file:///W:/repository",
+      Resolver.sonatypeRepo("snapshots")
+    ),
+    //resolvers += Resolver.sonatypeRepo("snapshots"),
     scalacOptions ++= List("-deprecation", "-feature"),
-    libraryDependencies += "org.slf4j" % "slf4j-api" % "1.6.4",
+    libraryDependencies += "org.slf4j" % "slf4j-api" % "1.7.5",
     logBuffered := false,
     repoKind <<= (version)(v => if(v.trim.endsWith("SNAPSHOT")) "snapshots" else "releases"),
     //publishTo <<= (repoKind)(r => Some(Resolver.file("test", file("c:/temp/repo/"+r)))),
@@ -54,7 +64,7 @@ object SlickBuild extends Build {
     publishMavenStyle := true,
     publishArtifact in Test := false,
     pomIncludeRepository := { _ => false },
-    makePomConfiguration ~= { _.copy(configurations = Some(Seq(Compile, Runtime))) },
+    makePomConfiguration ~= { _.copy(configurations = Some(Seq(Compile, Runtime, Optional))) },
     homepage := Some(url("http://slick.typesafe.com")),
     startYear := Some(2008),
     licenses += ("Two-clause BSD-style license", url("http://github.com/slick/slick/blob/master/LICENSE.txt")),
@@ -77,39 +87,39 @@ object SlickBuild extends Build {
           <url>git@github.com:slick/slick.git</url>
           <connection>scm:git:git@github.com:slick/slick.git</connection>
         </scm>,
-    includeFilter in Sphinx := ("*.html" | "*.png" | "*.js" | "*.css" | "*.gif" | "*.txt"),
     // Work around scaladoc problem
     unmanagedClasspath in Compile += Attributed.blank(new java.io.File("doesnotexist"))
   ) ++ scalaSettings
 
   /* Project Definitions */
   lazy val aRootProject = Project(id = "root", base = file("."),
-    settings = Project.defaultSettings ++ sharedSettings ++ Seq(
-      target := file("target/root"),
+    settings = Project.defaultSettings ++ sharedSettings ++ extTarget("root", Some("target/root")) ++ Seq(
       sourceDirectory := file("target/root-src"),
       publishArtifact := false,
       test := (),
       testOnly <<= inputTask { argTask => (argTask) map { args => }}
     )).aggregate(slickProject, slickTestkitProject)
   lazy val slickProject = Project(id = "slick", base = file("."),
-    settings = Project.defaultSettings ++ inConfig(config("macro"))(Defaults.configSettings) ++ sharedSettings ++ fmppSettings ++ site.settings ++ site.sphinxSupport() ++ Seq(
+    settings = Project.defaultSettings ++ inConfig(config("macro"))(Defaults.configSettings) ++ sharedSettings ++ fmppSettings ++ site.settings ++ site.sphinxSupport() ++ extTarget("slick", None) ++ Seq(
       name := "Slick",
       description := "Scala Language-Integrated Connection Kit",
       scalacOptions in doc <++= (version).map(v => Seq("-doc-title", "Slick", "-doc-version", v)),
       test := (),
       testOnly <<= inputTask { argTask => (argTask) map { args => }},
       ivyConfigurations += config("macro").hide.extend(Compile),
+      libraryDependencies <+= scalaVersion("org.scala-lang" % "scala-compiler" % _ % "macro"),
       unmanagedClasspath in Compile <++= fullClasspath in config("macro"),
       mappings in (Compile, packageSrc) <++= mappings in (config("macro"), packageSrc),
       mappings in (Compile, packageBin) <++= mappings in (config("macro"), packageBin)
     ))
   lazy val slickTestkitProject = Project(id = "testkit", base = file("slick-testkit"),
-    settings = Project.defaultSettings ++ sharedSettings ++ Seq(
+    settings = Project.defaultSettings ++ sharedSettings ++ extTarget("testkit", None) ++ Seq(
       name := "Slick-TestKit",
       description := "Test Kit for Slick (Scala Language-Integrated Connection Kit)",
       scalacOptions in doc <++= (version).map(v => Seq("-doc-title", "Slick TestKit", "-doc-version", v)),
       testOptions += Tests.Argument(TestFrameworks.JUnit, "-q", "-v", "-s", "-a"),
       //scalacOptions in Compile += "-Yreify-copypaste",
+      libraryDependencies <+= scalaVersion("org.scala-lang" % "scala-compiler" % _ % "test"),
       libraryDependencies ++= Seq(
         // TestKit needs JUnit for its Runner
         "junit" % "junit-dep" % "4.10",
@@ -122,7 +132,9 @@ object SlickBuild extends Build {
         "org.hsqldb" % "hsqldb" % "2.2.8" % "test",
         "postgresql" % "postgresql" % "9.1-901.jdbc4" % "test",
         "mysql" % "mysql-connector-java" % "5.1.13" % "test",
-        "net.sourceforge.jtds" % "jtds" % "1.2.4" % "test"
+        "net.sourceforge.jtds" % "jtds" % "1.2.4" % "test",
+        "com.oracle.jdbc" % "classes" % "12" % "test",
+        "com.oracle.jdbc" % "nls_charset" % "12" % "test"
       ),
       // Run the Queryable tests (which need macros) on a forked JVM
       // to avoid classloader problems with reification
