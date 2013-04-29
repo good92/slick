@@ -10,6 +10,7 @@ import scala.slick.jdbc.meta.MTable
 import com.typesafe.slick.testkit.util.{ExternalTestDB, TestDB}
 
 object TestDBs {
+  /*
   def H2Mem(cname: String) = new TestDB("h2mem", H2Driver) {
     val url = "jdbc:h2:mem:test1"
     val jdbcDriver = "org.h2.Driver"
@@ -90,8 +91,20 @@ object TestDBs {
       tables.list.filter(_._4.toUpperCase == "SEQUENCE").map(_._3).sorted
     }
     override lazy val capabilities = driver.capabilities + TestDB.plainSql + TestDB.plainSqlWide
-  }
+  }  */
 
+  def Oracle(cname: String) = new ExternalTestDB("oracle", OracleDriver) {
+    override def getLocalTables(implicit session: profile.Backend#Session) = {
+      val tables = ResultSetInvoker[(String,String,String, String)](_.conn.getMetaData().getTables("", "public", null, null))
+      tables.list.filter(_._4.toUpperCase == "TABLE").map(_._3).sorted
+    }
+    override def getLocalSequences(implicit session: profile.Backend#Session) = {
+      val tables = ResultSetInvoker[(String,String,String, String)](_.conn.getMetaData().getTables("", "public", null, null))
+      tables.list.filter(_._4.toUpperCase == "SEQUENCE").map(_._3).sorted
+    }
+    override lazy val capabilities = driver.capabilities + TestDB.plainSql + TestDB.plainSqlWide
+  }
+     /*
   def MySQL(cname: String) = new ExternalTestDB("mysql", MySQLDriver) {
     // Recreating the DB is faster than dropping everything individually
     override def dropUserArtifacts(implicit session: profile.Backend#Session) = {
@@ -236,4 +249,5 @@ class SQLServerDB(confName: String) extends ExternalTestDB(confName, SQLServerDr
     (Q.u+"drop table "+driver.quoteIdentifier(t)).execute()
   }
   override lazy val capabilities = driver.capabilities + TestDB.plainSql
+}      */
 }
