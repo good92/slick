@@ -20,14 +20,15 @@ class PrimaryKeyTest(val tdb: TestDB) extends TestkitTest {
     assertEquals(Set("pk_a"), A.primaryKeys.map(_.name).toSet)
 
     A.ddl.createStatements foreach println
-    A.ddl.create
-
-    A insertAll (
+    logOrFixCreation(A.ddl.tableExist("a"), A.ddl.create, A.ddl.drop)
+    log( A insertAll (
       (1, 1, "a11"),
       (1, 2, "a12"),
       (2, 1, "a21"),
       (2, 2, "a22")
-    )
+      ), "Insertion done.")
+
+
 
     assertFail { A.insert(1, 1, "a11-conflict") }
   }
