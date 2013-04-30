@@ -13,8 +13,8 @@ class PagingTest(val tdb: TestDB) extends TestkitTest {
 
   def test {
 
-    IDs.ddl.create;
-    IDs.insertAll((1 to 10):_*)
+    logOrFixCreation(IDs.ddl.tableExist("ids"), IDs.ddl.create, IDs.ddl.drop)
+    log(IDs.insertAll((1 to 10):_*), "Insertion done.")
 
     val q1 = Query(IDs).sortBy(_.id)
     println("q1: "+q1.selectStatement)
