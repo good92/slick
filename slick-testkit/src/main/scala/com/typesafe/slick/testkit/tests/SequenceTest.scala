@@ -21,8 +21,8 @@ class SequenceTest(val tdb: TestDB) extends TestkitTest {
 
     val ddl = Users.ddl ++ mySequence.ddl
     ddl.createStatements.foreach(println)
-    ddl.create
-    Users.insertAll(1, 2, 3)
+    logOrFixCreation(ddl.tableExist("users"), ddl.create, ddl.drop)  // logOrFixCreation("t2", ddl)
+    log(Users.insertAll(1, 2, 3), "Insert table done")
 
     val q1 = for(u <- Users) yield (mySequence.next, u.id)
     println("q1: " + q1.selectStatement)
@@ -46,7 +46,7 @@ class SequenceTest(val tdb: TestDB) extends TestkitTest {
       if(create) {
         val ddl = s.ddl
         ddl.createStatements.foreach(println)
-        ddl.create
+        logOrFixCreation(ddl.tableExist(s.name), ddl.create, ddl.drop)
       }
       val q = Query(s.next)
       println(q.selectStatement)
