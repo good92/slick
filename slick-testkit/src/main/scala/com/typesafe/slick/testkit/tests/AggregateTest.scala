@@ -14,8 +14,10 @@ class AggregateTest(val tdb: TestDB) extends TestkitTest {
       def b = column[Option[Int]]("b")
       def * = a ~ b
     }
-    T.ddl.create
-    T.insertAll((1, Some(1)), (1, Some(2)), (1, Some(3)))
+
+    logOrFixCreation(T.ddl.tableExist("t2"), T.ddl.create, T.ddl.drop)  // logOrFixCreation("t2", T)
+    log(T.insertAll((1, Some(1)), (1, Some(2)), (1, Some(3))), "Insert table done")
+
     def q1(i: Int) = for { t <- T if t.a === i } yield t
     def q2(i: Int) = (q1(i).length, q1(i).map(_.a).sum, q1(i).map(_.b).sum, q1(i).map(_.b).avg)
     val q2_0 = q2(0).toQueryExecutor
@@ -34,10 +36,12 @@ class AggregateTest(val tdb: TestDB) extends TestkitTest {
       def b = column[Option[Int]]("b")
       def * = a ~ b
     }
-    T.ddl.create
+
+    logOrFixCreation(T.ddl.tableExist("t3"), T.ddl.create, T.ddl.drop)
     T.insertAll((1, Some(1)), (1, Some(2)), (1, Some(3)))
     T.insertAll((2, Some(1)), (2, Some(2)), (2, Some(5)))
     T.insertAll((3, Some(1)), (3, Some(9)))
+    logInsert()
 
     println("=========================================================== q0")
     val q0 = T.groupBy(_.a)
@@ -61,8 +65,9 @@ class AggregateTest(val tdb: TestDB) extends TestkitTest {
       def id = column[Int]("id")
       def * = id
     }
-    U.ddl.create
+   // logOrFixCreation(U.ddl.create, U.ddl.drop)
     U.insertAll(1, 2, 3)
+    logInsert()
 
     println("=========================================================== q2")
     val q2 = (for {
