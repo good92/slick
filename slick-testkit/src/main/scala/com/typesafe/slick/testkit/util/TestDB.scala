@@ -9,7 +9,7 @@ import org.junit.Assert
 import scala.slick.driver._
 import java.net.{URL, URLClassLoader}
 import java.sql.Driver
-import scala.collection.mutable
+import collection.mutable.IndexedSeq
 import scala.slick.profile.Capability
 
 object TestDB {
@@ -94,10 +94,11 @@ object TestDB {
  * features such as reading the configuration file, setting up a DB connection,
  * removing DB files left over by a test run, etc.
  */
-abstract class TestDB(final val confName: String, final val driver: ExtendedDriver) {
-  final val profile: ExtendedProfile = driver
+abstract class TestDB(final val confName: String, final val driver: JdbcDriver) {
+  final val profile: JdbcProfile = driver
   protected val Database = profile.backend.Database
-
+  val emptyVector: Vector[String] = Vector[String]("")
+  var tables: Vector[String]
   override def toString = url
   val url: String
   val jdbcDriver: String
@@ -111,6 +112,16 @@ abstract class TestDB(final val confName: String, final val driver: ExtendedDriv
     val tables = ResultSetInvoker[(String,String,String, String)](_.conn.getMetaData().getTables("", "", null, null))
     tables.list.filter(_._4.toUpperCase == "TABLE").map(_._3).sorted
   }
+  def tableExists(implicit session: profile.Backend#Session, tableName: String): Boolean = {
+    if (emptyVector==this.tables) {
+      this.tables = getLocalTables(session).toVector
+    }
+    if (tables.contains(tableName)) {
+          return true
+    }
+    return false
+  }
+
   def getLocalSequences(implicit session: profile.Backend#Session) = {
     val tables = ResultSetInvoker[(String,String,String, String)](_.conn.getMetaData().getTables("", "", null, null))
     tables.list.filter(_._4.toUpperCase == "SEQUENCE").map(_._3).sorted
@@ -140,7 +151,8 @@ abstract class TestDB(final val confName: String, final val driver: ExtendedDriv
   lazy val capabilities = driver.capabilities
 }
 
-class ExternalTestDB(confName: String, driver: ExtendedDriver) extends TestDB(confName, driver) {
+class ExternalTestDB(confName: String, driver: JdbcDriver) extends TestDB(confName, driver) {
+  var tables: Vector[String] = emptyVector
   val jdbcDriver = TestDB.get(confName, "driver").orNull
   val urlTemplate = TestDB.get(confName, "url").getOrElse("")
   val dbPath = new File(TestDB.testDBDir).getAbsolutePath
@@ -201,7 +213,7 @@ class ExternalTestDB(confName: String, driver: ExtendedDriver) extends TestDB(co
 
 object ExternalTestDB {
   // A cache for custom drivers to avoid excessive reloading and memory leaks
-  private[this] val driverCache = new mutable.HashMap[(String, String), Driver]()
+  private[this] val driverCache = new collection.mutable.HashMap[(String, String), Driver]()
 
   def getCustomDriver(url: String, driverClass: String): Driver = synchronized {
     driverCache.getOrElseUpdate((url, driverClass),
