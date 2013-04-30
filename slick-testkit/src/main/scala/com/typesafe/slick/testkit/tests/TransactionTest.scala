@@ -13,7 +13,7 @@ class TransactionTest(val tdb: TestDB) extends TestkitTest {
       def * = a
     }
 
-    T.ddl.create
+    logOrFixCreation(T.ddl.tableExist("t"), T.ddl.create, T.ddl.drop)
 
     val q = Query(T)
 
