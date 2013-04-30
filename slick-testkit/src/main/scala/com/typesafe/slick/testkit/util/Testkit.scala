@@ -9,6 +9,8 @@ import scala.slick.profile.{SqlProfile, Capability}
 import scala.slick.driver.JdbcProfile
 import com.typesafe.slick.testkit.{tests => tk}
 import java.lang.reflect.Method
+//import com.typesafe.slick.testkit.util.{TestDB, TestMethod}
+//import slick.lifted.DDL
 
 /** Lists all tests of the Slick driver test kit */
 object Testkit {
@@ -29,7 +31,6 @@ object Testkit {
     classOf[tk.MutateTest] ::
     classOf[tk.NestingTest] ::
     classOf[tk.NewQuerySemanticsTest] ::
-    classOf[tk.OldTest] ::
     classOf[tk.PagingTest] ::
     classOf[tk.PlainSQLTest] ::
     classOf[tk.PrimaryKeyTest] ::
@@ -38,7 +39,6 @@ object Testkit {
     classOf[tk.TemplateTest] ::
     classOf[tk.TransactionTest] ::
     classOf[tk.UnionTest] ::
-    classOf[tk.ZipTest] ::
     (Nil: List[Class[_ <: TestkitTest]])
 }
 
@@ -149,4 +149,75 @@ trait TestkitTest {
     if(caps.forall(c => tdb.capabilities.contains(c))) f
   def ifNotCap[T](caps: Capability*)(f: => T): Unit =
     if(!caps.forall(c => tdb.capabilities.contains(c))) f
+
+  // http://stackoverflow.com/questions/1193333/using-either-to-process-failures-in-scala-code
+  def throwableToLeft[T](action: => T): Either[java.lang.Throwable, T] =
+    try {
+      Right(action)
+    } catch {
+      case ex: Throwable => Left(ex)
+  }
+
+
+  def run[A, F](testFunction: => Boolean, actionFunction: => A, message: String, fixFunction: => F, /* var */ depthLimit: Int){
+    println("run action")
+    //i-- depthLimit-- // Fail with: 'value -- is not a member of Int' -> val/var problem
+    // http://stackoverflow.com/questions/9535821/scala-mutable-var-method-parameter-reference
+    val depth = depthLimit - 1
+
+    throwableToLeft { actionFunction } match {
+      case Right(actionFunction) => println(message)
+      case Left(actionFunction) =>
+        println(actionFunction.printStackTrace)
+        fixIt(testFunction, actionFunction, message, fixFunction, depth)
+    }
+  }
+
+  // http://stackoverflow.com/questions/9822149/scala-boolean-function-abstraction
+  def fixIt[A, F](testFunction: => Boolean, actionFunction: => A, message: String, fixFunction: => F, /* var */ depthLimit: Int){
+    val depth = depthLimit
+    println("before fix")
+    fixFunction
+    println("after fix")
+    run(testFunction, actionFunction, message, fixFunction, depth)
+  }
+
+  // http://stackoverflow.com/questions/6349202/can-i-pass-an-arbitrary-function-to-another-function-in-scala
+  def logOrFix[A, F](testFunction: => Boolean, actionFunction: => A, message: String, fixFunction: => F, /* var */ depthLimit: Int){
+    if (depthLimit==0) return
+
+    val depth = depthLimit
+
+    if (!testFunction) {
+      fixIt(testFunction, actionFunction, message, fixFunction, depth)
+      return
+    }
+
+    run(testFunction, actionFunction, message, fixFunction, depth)
+  }
+
+  def log[T](action: => T, message: String){
+    throwableToLeft { action } match {
+      case Right(s) => println(message)
+      case Left(e) => println("FAIL:" + message); throw e
+    }
+  }
+
+  def logOrFixCreation[A, F](testFunction: => Boolean, actionFunction: => A, fixFunction: => F){
+    logOrFix(testFunction, actionFunction, "Table Creation done.", fixFunction, 2)
+  }
+
+  // todo: logOrFixCreation(T.ddl.tableExists("t2"), T.ddl.create, T.ddl.drop) -> logOrFixCreation("t2", T) -> logOrFix(logFix.CREATION, T, "t2") -> logOrFix(logFix.CREATION)
+ /*def logOrFixCreation(table: String, t: [Class[_ <: scala.slick.driver.Table]]){
+    logOrFixCreation(t.tableExists(table), t.ddl.create, t.ddl.drop)
+  }*/
+
+  def logInsert[T](block: => T){
+    log(block, "Insertion done.")
+  }
+
+  def logInsert(){
+    println("Insertion done.")
+  }
+
 }
