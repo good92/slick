@@ -30,7 +30,7 @@ class AggregateTest(val tdb: TestDB) extends TestkitTest {
     assertEquals((3, Some(3), Some(6), Some(2)), q2_1.run)
   }
 
-  def testGroupBy = {
+  def testGroupBy = {   // ERROR
     object T extends Table[(Int, Option[Int])]("t3") {
       def a = column[Int]("a")
       def b = column[Option[Int]]("b")
@@ -38,9 +38,9 @@ class AggregateTest(val tdb: TestDB) extends TestkitTest {
     }
 
     logOrFixCreation(T.ddl.tableExist("t3"), T.ddl.create, T.ddl.drop)
-    T.insertAll((1, Some(1)), (1, Some(2)), (1, Some(3)))
-    T.insertAll((2, Some(1)), (2, Some(2)), (2, Some(5)))
-    T.insertAll((3, Some(1)), (3, Some(9)))
+    logInsert(T.insertAll((1, Some(1)), (1, Some(2)), (1, Some(3))))
+    logInsert(T.insertAll((2, Some(1)), (2, Some(2)), (2, Some(5))))
+    logInsert(T.insertAll((3, Some(1)), (3, Some(9))))
     logInsert()
 
     println("=========================================================== q0")
