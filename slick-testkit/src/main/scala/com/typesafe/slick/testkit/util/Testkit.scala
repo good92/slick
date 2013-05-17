@@ -9,6 +9,11 @@ import scala.slick.profile.{SqlProfile, Capability}
 import scala.slick.driver.JdbcProfile
 import com.typesafe.slick.testkit.{tests => tk}
 import java.lang.reflect.Method
+import slick.jdbc.UnitInvoker
+import slick.lifted.DDL
+import slick.lifted.DDL
+
+
 //import com.typesafe.slick.testkit.util.{TestDB, TestMethod}
 //import slick.lifted.DDL
 
@@ -151,6 +156,7 @@ trait TestkitTest {
     if(!caps.forall(c => tdb.capabilities.contains(c))) f
 
   // http://stackoverflow.com/questions/1193333/using-either-to-process-failures-in-scala-code
+  // http://stackoverflow.com/questions/5329078/get-arguments-back-from-partially-applied-function-in-scala
   def throwableToLeft[T](action: => T): Either[java.lang.Throwable, T] =
     try {
       Right(action)
@@ -158,6 +164,15 @@ trait TestkitTest {
       case ex: Throwable => Left(ex)
   }
 
+  // http://stackoverflow.com/questions/8556743/printing-out-a-functions-name-in-println  -> todo: print ddl.statements or query
+  // http://oldfashionedsoftware.com/2008/08/23/fun-with-scala-functions/
+  def analyze[A](function: => A) {
+     function
+  }
+
+ /* def print[A](ddl: DDL) {
+      ddl.createStatements foreach println
+  } */
 
   def run[A, F](testFunction: => Boolean, actionFunction: => A, message: String, fixFunction: => F, /* var */ depthLimit: Int){
     println("run action")
@@ -165,7 +180,10 @@ trait TestkitTest {
     // http://stackoverflow.com/questions/9535821/scala-mutable-var-method-parameter-reference
     val depth = depthLimit - 1
 
-    throwableToLeft { actionFunction } match {
+    throwableToLeft {
+      println(actionFunction.toString)   // http://stackoverflow.com/questions/8556743/printing-out-a-functions-name-in-println  -> todo: print ddl.statements or query
+      actionFunction
+    } match {
       case Right(actionFunction) => println(message)
       case Left(actionFunction) =>
         println(actionFunction.printStackTrace)
@@ -177,7 +195,10 @@ trait TestkitTest {
   def fixIt[A, F](testFunction: => Boolean, actionFunction: => A, message: String, fixFunction: => F, /* var */ depthLimit: Int){
     val depth = depthLimit
     println("before fix")
-    fixFunction
+   try {
+     println(fixFunction.toString)
+     fixFunction
+   } catch { case ex: Throwable => }
     println("after fix")
     run(testFunction, actionFunction, message, fixFunction, depth)
   }
@@ -207,13 +228,23 @@ trait TestkitTest {
     logOrFix(testFunction, actionFunction, "Table Creation done.", fixFunction, 2)
   }
 
-  // todo: logOrFixCreation(T.ddl.tableExists("t2"), T.ddl.create, T.ddl.drop) -> logOrFixCreation("t2", T) -> logOrFix(logFix.CREATION, T, "t2") -> logOrFix(logFix.CREATION)
- /*def logOrFixCreation(table: String, t: [Class[_ <: scala.slick.driver.Table]]){
-    logOrFixCreation(t.tableExists(table), t.ddl.create, t.ddl.drop)
-  }*/
+  /*def logOrFixCreation(testInvoker: UnitInvoker, actionInvoker: UnitInvoker, fixInvoker: UnitInvoker) {
+  if (testInvoker) {
+    fixIt(testFunction, actionInvoker, message, fixInvoker, depth)
+    return
+  } */
 
-  def logInsert[T](block: => T){
-    log(block, "Insertion done.")
+  // todo: logOrFixCreation(T.ddl.tableExists("t2"), T.ddl.create, T.ddl.drop) -> logOrFixCreation("t2", T) -> logOrFix(logFix.CREATION, T, "t2") -> logOrFix(logFix.CREATION)
+/* def logOrFixCreation(tables: String*, t: Class[_ <: scala.slick.driver.JdbcDriver.Table]){
+    logOrFixCreation(tables, t.ddl)
+  }
+
+  def logOrFixCreation(tables: String*, ddl: scala.slick.lifted.DDL){
+    logOrFixCreation(ddl.tableExists(tables), ddl.create, ddl.drop)
+  }  */
+
+  def logInsert[T](action: => T){
+    log(action, "Insertion done.")
   }
 
   def logInsert(){
