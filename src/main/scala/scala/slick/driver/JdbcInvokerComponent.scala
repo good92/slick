@@ -5,8 +5,17 @@ import scala.slick.SlickException
 import scala.slick.ast.{CompiledStatement, ResultSetMapping, Node}
 import scala.slick.compiler.CodeGen
 import scala.slick.lifted.{DDL, Query, Shape, ShapedValue}
-import scala.slick.jdbc.{CompiledMapping, UnitInvoker, UnitInvokerMixin, MutatingStatementInvoker, MutatingUnitInvoker, ResultSetInvoker, PositionedParameters, PositionedResult}
 import scala.slick.util.{SQLBuilder, ValueLinearizer, RecordLinearizer}
+import scala._
+import slick.ast.CompiledStatement
+import slick.ast.ResultSetMapping
+import slick.jdbc.{StaticQuery => Q, _}
+import scala.slick.jdbc.GetResult._
+import slick.ast.CompiledStatement
+import slick.ast.ResultSetMapping
+import scala.Some
+import slick.ast.ResultSetMapping
+import scala.Some
 
 trait JdbcInvokerComponent { driver: JdbcDriver =>
 
@@ -33,25 +42,74 @@ trait JdbcInvokerComponent { driver: JdbcDriver =>
 
   /** Pseudo-invoker for running DDL statements. */
   class DDLInvoker(ddl: DDL) {
-    var isDebug = false
+    var isDebug = true  // deBUG MOde
+
+    // todo use http://www.javaworld.com/javaworld/jw-01-2002/jw-0125-overpower.html?page=3 DebuggableStatement
+    // http://www.ebi.ac.uk/ontology-lookup/api/index.html
+
+    def tableExist(tables: String*)(implicit session: Backend#Session): Boolean = {
+      for (table <- tables) {
+        try ((Q[Int]+"select 1 from "+driver.quoteIdentifier(table)+" where 1 < 0").list) catch { case _: Exception =>
+          return false
+        }
+      }
+      return true
+    }
+
     /** Create the entities described by this DDL object */
     def create(implicit session: Backend#Session): Unit = session.withTransaction {
-      // todo debug mode
-      var m: String = ""
+      if (isDebug) {
+        val iteratorString:Iterator[String] = ddl.createStatements
+        iteratorString foreach println
+        println("-----")
+      }
       try {
-        for(s <- ddl.createStatements) {
-          m = s
+        for (s <- ddl.createStatements) {
           session.withPreparedStatement(s)(_.execute)
         }
       } catch {
-        case e: Exception => println(m); throw e
+        case e: Exception => /* println(s); */ throw e
+      }
+    }
+
+  def revertExecution(statements: Iterator[String])(implicit session: Backend#Session): Unit = session.withTransaction {
+       val v: Vector[String] = new Vector[String](0,0,0)
+       for(s <- statements) {
+           v + s
+      }
+      if (isDebug) {
+        var m: String = ""
+       for (t <- v.reverseIterator) {
+         m = t
+         println(m)
+         session.withPreparedStatement(t)(_.execute)
+       }
+      } else {
+        for (t <- v.reverseIterator) {
+          session.withPreparedStatement(t)(_.execute)
+        }
       }
     }
 
     /** Drop the entities described by this DDL object */
     def drop(implicit session: Backend#Session): Unit = session.withTransaction {
-      for(s <- ddl.dropStatements)
-        session.withPreparedStatement(s)(_.execute)
+      revertExecution(ddl.dropStatements)
+     /* if (isDebug) {
+        var m: String = ""
+        try {
+          for(s <- ddl.dropStatements) {
+            m = s
+            println(m)
+            session.withPreparedStatement(s)(_.execute)
+          }
+        } catch {
+          case e: Exception => println(m); throw e
+        }
+      } else {
+        for(s <- ddl.dropStatements) {
+          session.withPreparedStatement(s)(_.execute)
+        }
+      }  */
     }
 
     def ddlInvoker: this.type = this
@@ -73,6 +131,7 @@ trait JdbcInvokerComponent { driver: JdbcDriver =>
 
   /** Pseudo-invoker for running INSERT calls. */
   abstract class InsertInvoker[U](unpackable: ShapedValue[_, U]) {
+    var isDebug = true  // deBUG MOde
     protected lazy val builder = createInsertBuilder(Node(unpackable.value))
 
     type RetOne
@@ -96,6 +155,7 @@ trait JdbcInvokerComponent { driver: JdbcDriver =>
     def insert(value: U)(implicit session: Backend#Session): RetOne = prepared(insertStatement) { st =>
       st.clearParameters()
       unpackable.linearizer.narrowedLinearizer.asInstanceOf[RecordLinearizer[U]].setParameter(driver, new PositionedParameters(st), Some(value))
+      println(st) // deBUG
       val count = st.executeUpdate()
       retOne(st, value, count)
     }
@@ -106,19 +166,25 @@ trait JdbcInvokerComponent { driver: JdbcDriver =>
       * batch fails, an exception is thrown. */
     def insertAll(values: U*)(implicit session: Backend#Session): RetMany = session.withTransaction {
       if(!useBatchUpdates || (values.isInstanceOf[IndexedSeq[_]] && values.length < 2)) {
-        retMany(values, values.map(insert))
-      } else {
-        prepared(insertStatement) { st =>
-          st.clearParameters()
-          for(value <- values) {
-            unpackable.linearizer.narrowedLinearizer.asInstanceOf[RecordLinearizer[U]].setParameter(driver, new PositionedParameters(st), Some(value))
-            st.addBatch()
-          }
-          var unknown = false
-          val counts = st.executeBatch()
-          retManyBatch(st, values, counts)
-        }
-      }
+            retMany(values, values.map(insert))
+          } else {
+            val m = insertStatement
+            try {
+              prepared(insertStatement) { st =>
+                st.clearParameters()
+                for(value <- values) {
+                  unpackable.linearizer.narrowedLinearizer.asInstanceOf[RecordLinearizer[U]].setParameter(driver, new PositionedParameters(st), Some(value))
+                  st.addBatch()
+                }
+                st.executeBatch
+
+              val counts = st.executeBatch()
+              retManyBatch(st, values, counts)
+              }
+            } catch {
+              case e: Exception => println(m); throw e
+            }
+       }
     }
 
     def insertInvoker: this.type = this
@@ -127,19 +193,23 @@ trait JdbcInvokerComponent { driver: JdbcDriver =>
   /** An InsertInvoker that can also insert from another query. */
   trait FullInsertInvoker[U] { this: InsertInvoker[U] =>
     type RetQuery
-
     protected def retQuery(st: Statement, updateCount: Int): RetQuery
 
     def insertExpr[TT](c: TT)(implicit shape: Shape[TT, U, _], session: Backend#Session): RetQuery =
       insert(Query(c)(shape))(session)
 
     def insert[TT](query: Query[TT, U])(implicit session: Backend#Session): RetQuery = {
-      val sbr = builder.buildInsert(query)
-      prepared(insertStatementFor(query)) { st =>
-        st.clearParameters()
-        sbr.setter(new PositionedParameters(st), null)
-        val count = st.executeUpdate()
-        retQuery(st, count)
+      val m = query.toString
+      try {
+        val sbr = builder.buildInsert(query)
+        prepared(insertStatementFor(query)) { st =>
+          st.clearParameters()
+          sbr.setter(new PositionedParameters(st), null)
+          val count = st.executeUpdate()
+          retQuery(st, count)
+        }
+      } catch {
+          case e: Exception => println(m); throw e
       }
     }
   }
