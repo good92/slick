@@ -20,6 +20,12 @@ final class SQLBuilder extends SQLBuilder.Segment { self =>
     currentStringSegment
   }
 
+  /* Insert at start */
+  /* protected[driver] */ def =+(s: String) = {ss.sb.insert(0,s); this }
+
+  /* Insert at X */
+  /* protected[driver] */ def =+(s: String, i: Int) = {ss.sb.insert(i, s); this }
+
   def +=(s: String) = { ss.sb append s; this }
 
   def +=(i: Int) = { ss.sb append i; this }
