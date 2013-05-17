@@ -9,13 +9,9 @@ import scala.slick.profile.{SqlProfile, Capability}
 import scala.slick.driver.JdbcProfile
 import com.typesafe.slick.testkit.{tests => tk}
 import java.lang.reflect.Method
-import slick.jdbc.UnitInvoker
-import slick.lifted.DDL
-import slick.lifted.DDL
-
-
-//import com.typesafe.slick.testkit.util.{TestDB, TestMethod}
-//import slick.lifted.DDL
+import scala.slick.driver.JdbcDriver.Table
+import scala.slick.jdbc.UnitInvoker
+import scala.slick.lifted.DDL
 
 /** Lists all tests of the Slick driver test kit */
 object Testkit {
@@ -228,20 +224,24 @@ trait TestkitTest {
     logOrFix(testFunction, actionFunction, "Table Creation done.", fixFunction, 2)
   }
 
-  /*def logOrFixCreation(testInvoker: UnitInvoker, actionInvoker: UnitInvoker, fixInvoker: UnitInvoker) {
-  if (testInvoker) {
-    fixIt(testFunction, actionInvoker, message, fixInvoker, depth)
-    return
-  } */
+  def logOrFixCreation(ddl: DDL){
+    //tdb.driver.capabilities
+    log(ddl)
+    val i = tdb.driver.Implicit.ddlToDDLInvoker(ddl)
 
-  // todo: logOrFixCreation(T.ddl.tableExists("t2"), T.ddl.create, T.ddl.drop) -> logOrFixCreation("t2", T) -> logOrFix(logFix.CREATION, T, "t2") -> logOrFix(logFix.CREATION)
-/* def logOrFixCreation(tables: String*, t: Class[_ <: scala.slick.driver.JdbcDriver.Table]){
-    logOrFixCreation(tables, t.ddl)
+    logOrFix(i.tableExist(this.tdb.getLocalTables), i.create, "Table(s) Creation(s) done.", i.drop, 2)
   }
 
-  def logOrFixCreation(tables: String*, ddl: scala.slick.lifted.DDL){
-    logOrFixCreation(ddl.tableExists(tables), ddl.create, ddl.drop)
-  }  */
+  def logOrFixCreation(tt: Any){//Table[_]){  // Table)
+    //tdb.driver.capabilities
+  val t = tt.asInstanceOf[Table[_]]
+    log(t.ddl)
+
+    val i = tdb.driver.Implicit.ddlToDDLInvoker(t.ddl)
+    //val i = tdb.driver(t.ddl)
+
+    logOrFix(i.tableExist(List(t.tableName)), i.create, "Table Creation done for " + t.tableName, i.drop, 2)
+  }
 
   def logInsert[T](action: => T){
     log(action, "Insertion done.")
@@ -251,4 +251,27 @@ trait TestkitTest {
     println("Insertion done.")
   }
 
+  def drop(t: Any){//Table[_]){
+    val tt = t.asInstanceOf[Table[_]]
+    drop(tt.ddl)
+  }
+  def drop(ddl: DDL){
+    logDrop(ddl)
+    val i = tdb.driver.Implicit.ddlToDDLInvoker(ddl)
+    i.drop
+  }
+
+  def log(ddl: DDL){ddl.createStatements.foreach(println)}
+  def logDrop(ddl: DDL){ddl.dropStatements.toVector.reverseIterator.foreach(println)}
+
+  def log(t: Any){
+    // tofix: java.lang.ClassCastException: scala.slick.lifted.DDL$$anon$2 cannot be cast to scala.slick.driver.JdbcTableComponent$Table
+    val tt = t.asInstanceOf[Table[_]]
+    log(tt.ddl)
+  }
+
+  def logDrop(tt: Any){ // Table[_] - _ :< Table
+    val t = tt.asInstanceOf[Table[_]]
+    logDrop(t.ddl)
+  }
 }
