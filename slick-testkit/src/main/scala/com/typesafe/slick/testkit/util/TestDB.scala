@@ -97,7 +97,6 @@ object TestDB {
 abstract class TestDB(final val confName: String, final val driver: JdbcDriver) {
   final val profile: JdbcProfile = driver
   protected val Database = profile.backend.Database
-  val emptyVector: Vector[String] = Vector[String]("")
   var tables: Vector[String]
   override def toString = url
   val url: String
@@ -113,7 +112,7 @@ abstract class TestDB(final val confName: String, final val driver: JdbcDriver) 
     tables.list.filter(_._4.toUpperCase == "TABLE").map(_._3).sorted
   }
   def tableExists(implicit session: profile.Backend#Session, tableName: String): Boolean = {
-    if (emptyVector==this.tables) {
+    if (Vector.empty==this.tables) {
       this.tables = getLocalTables(session).toVector
     }
     if (tables.contains(tableName)) {
@@ -152,7 +151,7 @@ abstract class TestDB(final val confName: String, final val driver: JdbcDriver) 
 }
 
 class ExternalTestDB(confName: String, driver: JdbcDriver) extends TestDB(confName, driver) {
-  var tables: Vector[String] = emptyVector
+  var tables = Vector.empty
   val jdbcDriver = TestDB.get(confName, "driver").orNull
   val urlTemplate = TestDB.get(confName, "url").getOrElse("")
   val dbPath = new File(TestDB.testDBDir).getAbsolutePath
